@@ -1,6 +1,7 @@
 local match = require("game.match")
 local ai = require("game.ai")
 local view = require("game.view")
+local animation = require("game.animation")
 local state
 local selected
 local notice
@@ -11,10 +12,20 @@ local function restart()
     state = match.new(love.math.random)
     selected, notice = nil, nil
     ai_time, notice_time = 0, 0
+    view.reset()
+end
+
+local function apply_action(side, action)
+    local valid, reason = match.validate(state, side, action)
+    if not valid then return false, reason end
+    local before = animation.snapshot(state)
+    local ok, error_message = match.apply(state, side, action)
+    if ok then view.animate(before, state, side, action) end
+    return ok, error_message
 end
 
 local function act(action)
-    local ok, reason = match.apply(state, 1, action)
+    local ok, reason = apply_action(1, action)
     if ok then
         selected, notice = nil, nil
         ai_time = 0
@@ -29,16 +40,17 @@ function love.load()
 end
 
 function love.update(dt)
+    view.update(dt, state)
     if notice then
         notice_time = notice_time - dt
         if notice_time <= 0 then notice = nil end
     end
-    if state.active == 2 and not state.winner then
+    if state.active == 2 and not state.winner and not view.busy() then
         ai_time = ai_time + dt
         if ai_time >= 0.8 then
             ai_time = 0
             local action = ai.choose(state, 2)
-            if action then match.apply(state, 2, action) end
+            if action then apply_action(2, action) end
         end
     end
 end
@@ -49,7 +61,7 @@ end
 
 function love.mousepressed(x, y, button)
     if button == 2 then selected, notice = nil, nil; return end
-    if button ~= 1 then return end
+    if button ~= 1 or view.busy() then return end
     local hit = view.hit(state, x, y)
     if not hit then return end
     if hit.kind == "restart" then restart(); return end

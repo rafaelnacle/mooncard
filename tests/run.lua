@@ -190,4 +190,60 @@ test("full board and hand hit regions fit the window without overlap", function(
     assert(not view.hit(s, 1170, 460))
 end)
 
+test("summon animation preserves its source snapshot and finishes after a long frame", function()
+    local animation = require("game.animation")
+    local s = fresh()
+    s.players[1].hand = { 1 }
+    local before = animation.snapshot(s)
+    local action = { kind = "play", hand = 1 }
+    assert(match.apply(s, 1, action))
+    local effect = animation.new(before, s, 1, action)
+    assert(effect.summoned == s.players[1].board[1].id)
+    assert(#before.players[1].hand == 1 and #before.players[1].board == 0)
+    local state_before = snapshot(s)
+    effect = animation.update(effect, 0.1)
+    assert(effect and animation.progress(effect) > 0)
+    assert(animation.update(effect, 10) == nil)
+    assert(snapshot(s) == state_before, "Animation mutated live rules")
+end)
+
+test("combat animation retains both dead cards and simultaneous damage", function()
+    local animation = require("game.animation")
+    local s = fresh()
+    s.players[1].board = { unit(1, 2) }
+    s.players[2].board = { unit(2, 2) }
+    local before = animation.snapshot(s)
+    local action = { kind = "attack", attacker = 1, target = 2 }
+    assert(match.apply(s, 1, action))
+    local effect = animation.new(before, s, 1, action)
+    assert(#effect.dead == 2 and #effect.damage == 2)
+    assert(effect.damage[1].amount == 3 and effect.damage[2].amount == 3)
+    animation.update(effect, 0.1)
+    assert(effect.elapsed < effect.impact and animation.progress(effect) == 0)
+    animation.update(effect, 0.1)
+    assert(effect.elapsed > effect.impact and animation.progress(effect) > 0)
+    assert(#s.players[1].board == 0 and #before.players[1].board == 1)
+end)
+
+test("hero lethal and fatigue animate without inventing dead creatures", function()
+    local animation = require("game.animation")
+    local s = fresh()
+    s.players[1].board = { unit(1, 4) }
+    s.players[2].health = 5
+    local before = animation.snapshot(s)
+    local action = { kind = "attack", attacker = 1, target = "hero" }
+    assert(match.apply(s, 1, action))
+    local effect = animation.new(before, s, 1, action)
+    assert(s.winner == 1 and not before.winner)
+    assert(#effect.dead == 0 and #effect.damage == 1)
+    assert(effect.damage[1].id == "hero" and effect.damage[1].amount == 5)
+    s = fresh()
+    s.players[2].deck = {}
+    before = animation.snapshot(s)
+    action = { kind = "end_turn" }
+    assert(match.apply(s, 1, action))
+    effect = animation.new(before, s, 1, action)
+    assert(not effect.drawn_hand and effect.damage[1].amount == 1)
+end)
+
 print(passed .. " tests passed")

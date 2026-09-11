@@ -1,5 +1,9 @@
 local match = require("game.match")
+local animation = require("game.animation")
 local view = {}
+local effect
+local hover = {}
+local opacity = 1
 local fonts = {}
 local colors = {
     background = { 0.045, 0.060, 0.075 }, panel = { 0.075, 0.097, 0.115 },
@@ -9,7 +13,10 @@ local colors = {
     border = { 0.22, 0.29, 0.31 },
 }
 
-local function color(name) love.graphics.setColor(colors[name]) end
+local function color(name)
+    local c = colors[name]
+    love.graphics.setColor(c[1], c[2], c[3], opacity)
+end
 local function text(value, x, y, size, shade, width, align)
     color(shade or "ink")
     love.graphics.setFont(fonts[size or 16])
@@ -58,9 +65,43 @@ function view.regions(state)
     return regions
 end
 
+function view.reset()
+    effect, hover = nil, {}
+end
+
+function view.animate(before, after, side, action)
+    effect = animation.new(before, after, side, action)
+    hover = {}
+end
+
+function view.busy()
+    return effect ~= nil
+end
+
+function view.update(dt, state)
+    effect = animation.update(effect, dt)
+    local x, y = love.mouse.getPosition()
+    for i = 1, #state.players[1].hand do
+        local r
+        for _, candidate in ipairs(view.regions(state)) do
+            if candidate.kind == "hand" and candidate.index == i then r = candidate; break end
+        end
+        local amount = hover[i] or 0
+        local over = r and x >= r.x and x <= r.x + r.w and y >= r.y - amount * 8 and y <= r.y + r.h
+        local target = over and not effect and state.active == 1 and not state.winner and 1 or 0
+        hover[i] = amount + (target - amount) * (1 - math.exp(-18 * dt))
+    end
+end
+
 function view.hit(state, x, y)
     for _, region in ipairs(view.regions(state)) do
-        if contains(region, x, y) then return region end
+        if region.kind == "hand" then
+            local lift = (hover[region.index] or 0) * 8
+            if x >= region.x and x <= region.x + region.w and y >= region.y - lift
+                and y <= region.y + region.h then return region end
+        elseif contains(region, x, y) then
+            return region
+        end
     end
 end
 
@@ -76,7 +117,93 @@ local function creature(r, card, health, label, edge, hovered)
     text(label, r.x + 5, r.y + r.h - 24, 12, edge == "green" and "green" or "muted", r.w - 10, "center")
 end
 
+local function find_region(state, side, id)
+    for _, r in ipairs(view.regions({ players = state.players })) do
+        if r.side == side and ((id == "hero" and r.kind == "hero") or r.id == id) then return r end
+    end
+end
+
+local function moved(r, x, y)
+    return { x = x, y = y, w = r.w, h = r.h }
+end
+
+local function visual_region(state, r)
+    if not effect or effect.kind ~= "attack" or effect.elapsed < effect.impact or r.kind ~= "unit" then return r end
+    local from = find_region(effect.before, r.side, r.id)
+    local progress = animation.progress(effect)
+    -- Let defeated cards dissolve before closing gaps in the board.
+    local slide = math.max(0, (progress - 0.65) / 0.35)
+    local x, y = from.x + (r.x - from.x) * slide, from.y + (r.y - from.y) * slide
+    if r.id == effect.attacker then
+        local target = find_region(effect.before, 3 - effect.side, effect.target)
+        local dx = target.x + target.w / 2 - from.x - from.w / 2
+        local dy = target.y + target.h / 2 - from.y - from.h / 2
+        local distance = math.sqrt(dx * dx + dy * dy)
+        local travel = math.min(110, distance * 0.6)
+        local remaining = (1 - progress) ^ 3
+        x = x + (from.x + dx / math.max(1, distance) * travel - x) * remaining
+        y = y + (from.y + dy / math.max(1, distance) * travel - y) * remaining
+    end
+    return moved(r, x, y)
+end
+
+local function animated_creature(r, card, health, label, edge, hovered, scale)
+    love.graphics.push()
+    love.graphics.translate(r.x + r.w / 2, r.y + r.h / 2)
+    love.graphics.scale(scale or 1)
+    creature(moved(r, -r.w / 2, -r.h / 2), card, health, label, edge, hovered)
+    love.graphics.pop()
+end
+
+local function draw_effects(state)
+    if not effect then return end
+    local progress = animation.progress(effect)
+    if effect.elapsed >= effect.impact then
+        for _, death in ipairs(effect.dead) do
+            local r = find_region(effect.before, death.side, death.unit.id)
+            local scale = 1 - progress * 0.25
+            opacity = math.max(0, 1 - progress / 0.65)
+            animated_creature(moved(r, r.x, r.y + progress * 14), match.cards[death.unit.card],
+                0, "Defeated", "red", false, scale)
+            opacity = 1
+        end
+        for _, damage in ipairs(effect.damage) do
+            local r = find_region(state, damage.side, damage.id)
+            r = r and visual_region(state, r) or find_region(effect.before, damage.side, damage.id)
+            love.graphics.setColor(0.95, 0.35, 0.28, (1 - progress) * 0.4)
+            love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 8, 8)
+            love.graphics.setFont(fonts[28])
+            love.graphics.setColor(1, 0.65, 0.55, 1 - progress)
+            love.graphics.printf("-" .. damage.amount, r.x, r.y - 10 - progress * 24, r.w, "center")
+        end
+    end
+    if effect.kind == "attack" and effect.elapsed < effect.impact then
+        local r = find_region(effect.before, effect.side, effect.attacker)
+        local target = find_region(effect.before, 3 - effect.side, effect.target)
+        local amount = math.sin((effect.elapsed / effect.impact) * math.pi / 2)
+        local dx, dy = target.x + target.w / 2 - r.x - r.w / 2, target.y + target.h / 2 - r.y - r.h / 2
+        local distance = math.sqrt(dx * dx + dy * dy)
+        local travel = math.min(110, distance * 0.6) * amount
+        local unit = match.unit(effect.before.players[effect.side], effect.attacker)
+        animated_creature(moved(r, r.x + dx / math.max(1, distance) * travel,
+            r.y + dy / math.max(1, distance) * travel), match.cards[unit.card], unit.health, "Attacking", "gold", false, 1.03)
+    elseif effect.kind == "play" then
+        local r = find_region(state, effect.side, effect.summoned)
+        local unit = match.unit(state.players[effect.side], effect.summoned)
+        local from_x, from_y = 640 - r.w / 2, 86
+        if effect.side == 1 then
+            for _, hand in ipairs(view.regions(effect.before)) do
+                if hand.kind == "hand" and hand.index == effect.hand then from_x, from_y = hand.x, hand.y end
+            end
+        end
+        local eased = 1 - (1 - progress) ^ 3
+        animated_creature(moved(r, from_x + (r.x - from_x) * eased, from_y + (r.y - from_y) * eased),
+            match.cards[unit.card], unit.health, "Summoning", "gold", false, 0.85 + 0.15 * eased)
+    end
+end
+
 function view.draw(state, selected, notice)
+    if effect and effect.kind == "attack" and effect.elapsed < effect.impact then state = effect.before end
     color("background")
     love.graphics.clear(colors.background)
     text("MOONCARD", 24, 18, 28, "ink", 300)
@@ -105,11 +232,11 @@ function view.draw(state, selected, notice)
     text("WARDEN'S HAND  " .. #enemy.hand .. "/7", 890, 105, 12, "muted", 184, "right")
 
     -- Draw the board even when the end-of-match overlay replaces hit regions.
-    local winner = state.winner
+    local winner = state.winner and not effect and state.winner
     local display_state = { players = state.players }
     local mouse_x, mouse_y = love.mouse.getPosition()
     for _, r in ipairs(view.regions(display_state)) do
-        local hovered = not winner and contains(r, mouse_x, mouse_y)
+        local hovered = not winner and not effect and contains(r, mouse_x, mouse_y)
         if r.kind == "hero" then
             local player = state.players[r.side]
             local legal = selected and r.side == 2 and match.validate(state, 1,
@@ -130,12 +257,23 @@ function view.draw(state, selected, notice)
                 { kind = "attack", attacker = selected, target = unit.id }) then
                 edge, label = "red", "Attack target"
             end
-            creature(r, match.cards[unit.card], unit.health, label, edge, hovered)
+            local hidden = effect and ((effect.kind == "play" and unit.id == effect.summoned)
+                or (effect.kind == "attack" and effect.elapsed < effect.impact and unit.id == effect.attacker))
+            if not hidden then
+                animated_creature(visual_region(state, r), match.cards[unit.card], unit.health, label, edge, hovered, 1)
+            end
         elseif r.kind == "hand" then
             local card = match.cards[state.players[1].hand[r.index]]
             local valid = match.validate(state, 1, { kind = "play", hand = r.index })
-            creature(r, card, card.health, valid and "Click to summon" or "In hand",
-                valid and "green" or "border", hovered)
+            local lift = (hover[r.index] or 0) * 8
+            local scale = 1
+            if effect and effect.drawn_side == 1 and effect.drawn_hand == r.index then
+                local progress = animation.progress(effect)
+                lift = lift - (1 - progress) * 18
+                scale = 0.92 + 0.08 * progress
+            end
+            animated_creature(moved(r, r.x, r.y - lift), card, card.health, valid and "Click to summon" or "In hand",
+                valid and "green" or "border", hovered, scale)
         elseif r.kind == "end_turn" then
             box(r.x, r.y, r.w, r.h, hovered and "card" or "panel", state.active == 1 and "gold" or "border")
             text(state.active == 1 and "End turn" or "Warden thinking", r.x, r.y + 14,
@@ -153,6 +291,7 @@ function view.draw(state, selected, notice)
         240, 521, 14, notice and "gold" or "muted", 820, "center")
     text("YOUR HAND  " .. #state.players[1].hand .. "/7", 24, 690, 12, "muted", 200)
     text("Green: available   /   Gold: selected   /   Red: legal target", 380, 690, 12, "muted", 850, "right")
+    draw_effects(state)
     if winner then
         love.graphics.setColor(0.015, 0.025, 0.035, 0.88)
         love.graphics.rectangle("fill", 0, 0, 1280, 720)

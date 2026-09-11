@@ -5,9 +5,10 @@ Implement only the requested milestone. Keep changes small and understandable.
 
 ## Code and architecture
 
-- Keep `main.lua` as the LÖVE input/update entry point and `conf.lua` as window configuration. Rules live in `game/match.lua`, computer decisions in `game/ai.lua`, and drawing/layout in `game/view.lua`. Avoid speculative abstractions and empty directories.
+- Keep `main.lua` as the LÖVE input/update entry point and `conf.lua` as window configuration. Rules live in `game/match.lua`, computer decisions in `game/ai.lua`, drawing/layout in `game/view.lua`, and presentation snapshots/timing in `game/animation.lua`. Avoid speculative abstractions and empty directories.
 - Use LuaJIT-compatible Lua, four-space indentation, `snake_case` names, local variables, and small functions. Keep LÖVE callback names as required by its API.
 - Use LÖVE alone initially. Explain the need for any additional dependency before adding it.
+- Keep animations separate from rules. Apply legal actions once, then animate a presentation snapshot; block new gameplay actions during the short transition and clear effects on restart.
 - Keep pure Lua rules separate from drawing and input. Human input and AI must use the same rule validation.
 - Use original or appropriately licensed assets. The initial window uses the built-in font only.
 
