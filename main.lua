@@ -1,30 +1,77 @@
-local title_font
-local hint_font
+local match = require("game.match")
+local ai = require("game.ai")
+local view = require("game.view")
+local state
+local selected
+local notice
+local notice_time = 0
+local ai_time = 0
+
+local function restart()
+    state = match.new(love.math.random)
+    selected, notice = nil, nil
+    ai_time, notice_time = 0, 0
+end
+
+local function act(action)
+    local ok, reason = match.apply(state, 1, action)
+    if ok then
+        selected, notice = nil, nil
+        ai_time = 0
+    else
+        notice, notice_time = reason, 3
+    end
+end
 
 function love.load()
-    love.graphics.setBackgroundColor(0.06, 0.07, 0.10)
-    title_font = love.graphics.newFont(48)
-    hint_font = love.graphics.newFont(18)
+    view.load()
+    restart()
+end
+
+function love.update(dt)
+    if notice then
+        notice_time = notice_time - dt
+        if notice_time <= 0 then notice = nil end
+    end
+    if state.active == 2 and not state.winner then
+        ai_time = ai_time + dt
+        if ai_time >= 0.8 then
+            ai_time = 0
+            local action = ai.choose(state, 2)
+            if action then match.apply(state, 2, action) end
+        end
+    end
 end
 
 function love.draw()
-    local width, height = love.graphics.getDimensions()
-    local gap = 20
-    local text_height = title_font:getHeight() + gap + hint_font:getHeight()
-    local top = (height - text_height) / 2
+    view.draw(state, selected, notice)
+end
 
-    love.graphics.setColor(0.93, 0.94, 0.98)
-    love.graphics.setFont(title_font)
-    love.graphics.printf("Mooncard", 0, top, width, "center")
-
-    love.graphics.setColor(0.62, 0.65, 0.73)
-    love.graphics.setFont(hint_font)
-    love.graphics.printf("Press Escape to quit.", 0,
-        top + title_font:getHeight() + gap, width, "center")
+function love.mousepressed(x, y, button)
+    if button == 2 then selected, notice = nil, nil; return end
+    if button ~= 1 then return end
+    local hit = view.hit(state, x, y)
+    if not hit then return end
+    if hit.kind == "restart" then restart(); return end
+    if state.winner then return end
+    if state.active ~= 1 then notice, notice_time = "Wait for your turn.", 2; return end
+    if hit.kind == "hand" then
+        act({ kind = "play", hand = hit.index })
+    elseif hit.kind == "end_turn" then
+        act({ kind = "end_turn" })
+    elseif hit.kind == "unit" and hit.side == 1 then
+        local unit = match.unit(state.players[1], hit.id)
+        if not unit.ready then
+            notice, notice_time = "That creature cannot attack yet.", 3
+        else
+            selected = selected ~= hit.id and hit.id or nil
+            notice = nil
+        end
+    elseif hit.side == 2 and selected then
+        act({ kind = "attack", attacker = selected, target = hit.kind == "hero" and "hero" or hit.id })
+    end
 end
 
 function love.keypressed(key)
-    if key == "escape" then
-        love.event.quit()
-    end
+    if key == "escape" then love.event.quit() end
 end

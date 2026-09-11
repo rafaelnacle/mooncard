@@ -5,23 +5,23 @@ Implement only the requested milestone. Keep changes small and understandable.
 
 ## Code and architecture
 
-- Start with `main.lua` and `conf.lua`; avoid speculative abstractions and empty directories.
+- Keep `main.lua` as the LÖVE input/update entry point and `conf.lua` as window configuration. Rules live in `game/match.lua`, computer decisions in `game/ai.lua`, and drawing/layout in `game/view.lua`. Avoid speculative abstractions and empty directories.
 - Use LuaJIT-compatible Lua, four-space indentation, `snake_case` names, local variables, and small functions. Keep LÖVE callback names as required by its API.
 - Use LÖVE alone initially. Explain the need for any additional dependency before adding it.
-- When gameplay arrives, keep pure Lua rules separate from drawing and input. Human input and AI must use the same rule validation.
+- Keep pure Lua rules separate from drawing and input. Human input and AI must use the same rule validation.
 - Use original or appropriately licensed assets. The initial window uses the built-in font only.
 
 ## Verification
 
 - Run `love .` from the repository root for visual changes. Check appearance, responsiveness, Escape, the window close button, and relaunching.
-- Add meaningful automated tests when gameplay rules exist; do not introduce a window-testing framework for the bootstrap.
+- Run `luajit tests/run.lua` for rule or AI changes. The dependency-free suite includes seeded complete matches. LuaJIT is a development test runner; playing needs only LÖVE. Add meaningful cases for new rules and regressions.
 - Report checks performed and anything unverified. Never describe an unrun check as passing.
 - Review `git diff --check`, the staged diff, and repository status before committing.
 
 ## Documentation
 
 - Keep `README.md` limited to what the project is and how to install prerequisites and run it, including controls and the tested runtime version.
-- Keep development instructions here and milestone planning in `docs/plan.md`.
+- Keep development instructions here. `docs/plan.md` is an ignored local roadmap; do not stage it or force-add it. Keep new planning in the conversation unless asked to save it.
 - Update documented commands when behavior changes.
 
 ## Git and ownership
