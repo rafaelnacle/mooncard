@@ -1,9 +1,10 @@
 # Mooncard
 
 A small, offline card game built with Lua and LÖVE, inspired by Hearthstone.
-Duel the Warden, a simple computer opponent, with four fantasy creatures.
+Duel the Warden, a simple computer opponent, with eight fantasy creatures.
 Summon with mana, protect your hero with Guards, and reduce the opposing
-hero from 20 health to zero. Both sides use the same shuffled 12-card deck.
+hero from 20 health to zero. Both sides use the same 16-card deck, shuffled
+independently, with two copies of each creature.
 
 ## Run on Linux
 
@@ -26,7 +27,9 @@ love .
 
 Click a card in your hand to summon it. Click a ready friendly creature,
 then an enemy creature or hero to attack. Enemy **Guards** must be attacked
-first. New creatures wait until your next turn to attack.
+first. Guards have a shield badge and a pointed frame. The blue gem is mana
+cost, the sword is attack, and the heart is remaining health. Each creature
+has its own emblem and color. New creatures wait until your next turn to attack.
 
 Click **End turn** when finished. Mana refills and its maximum increases each
 turn, up to six. You draw a card each turn; a full seven-card hand discards

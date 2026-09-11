@@ -5,6 +5,10 @@ match.cards = {
     { name = "Goblin Raider", cost = 2, attack = 3, health = 2 },
     { name = "Grove Sentinel", cost = 3, attack = 2, health = 5, guard = true },
     { name = "Stone Ogre", cost = 4, attack = 5, health = 4 },
+    { name = "Dusk Wolf", cost = 2, attack = 2, health = 3 },
+    { name = "Iron Warder", cost = 2, attack = 1, health = 4, guard = true },
+    { name = "Ember Drake", cost = 5, attack = 6, health = 4 },
+    { name = "Elder Treant", cost = 6, attack = 4, health = 8, guard = true },
 }
 
 local function announce(state, message)
@@ -56,7 +60,7 @@ function match.new(random)
             deck = {}, hand = {}, board = {},
         }
         for card = 1, #match.cards do
-            for _ = 1, 3 do table.insert(player.deck, card) end
+            for _ = 1, 2 do table.insert(player.deck, card) end
         end
         for i = #player.deck, 2, -1 do
             local j = random(i)

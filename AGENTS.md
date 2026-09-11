@@ -10,7 +10,7 @@ Implement only the requested milestone. Keep changes small and understandable.
 - Use LÖVE alone initially. Explain the need for any additional dependency before adding it.
 - Keep animations separate from rules. Apply legal actions once, then animate a presentation snapshot; block new gameplay actions during the short transition and clear effects on restart.
 - Keep pure Lua rules separate from drawing and input. Human input and AI must use the same rule validation.
-- Use original or appropriately licensed assets. The initial window uses the built-in font only.
+- Use original or appropriately licensed assets. Creature emblems and card frames are drawn in `game/card_art.lua`; keep appearance out of the combat rules. Use the built-in font and LÖVE shapes for the current cards.
 
 ## Verification
 

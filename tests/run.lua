@@ -30,15 +30,15 @@ end
 test("opening hands, decks, first draw and mana", function()
     local s = fresh()
     assert(s.active == 1 and s.turn == 1)
-    assert(#s.players[1].hand == 4 and #s.players[1].deck == 8)
-    assert(#s.players[2].hand == 3 and #s.players[2].deck == 9)
+    assert(#s.players[1].hand == 4 and #s.players[1].deck == 12)
+    assert(#s.players[2].hand == 3 and #s.players[2].deck == 13)
     assert(s.players[1].mana == 1 and s.players[2].mana == 0)
     for _, p in ipairs(s.players) do
-        local counts = { 0, 0, 0, 0 }
+        local counts = { 0, 0, 0, 0, 0, 0, 0, 0 }
         for _, zone in ipairs({ p.deck, p.hand }) do
             for _, card in ipairs(zone) do counts[card] = counts[card] + 1 end
         end
-        for _, count in ipairs(counts) do assert(count == 3) end
+        for _, count in ipairs(counts) do assert(count == 2) end
     end
 end)
 
@@ -244,6 +244,23 @@ test("hero lethal and fatigue animate without inventing dead creatures", functio
     assert(match.apply(s, 1, action))
     effect = animation.new(before, s, 1, action)
     assert(not effect.drawn_hand and effect.damage[1].amount == 1)
+end)
+
+test("expanded roster is playable at its cost and every Guard protects its hero", function()
+    for card_id, card in ipairs(match.cards) do
+        local s = fresh()
+        s.players[1].hand, s.players[1].mana = { card_id }, card.cost
+        assert(match.apply(s, 1, { kind = "play", hand = 1 }))
+        local creature = s.players[1].board[1]
+        assert(creature.card == card_id and creature.health == card.health)
+        assert(s.players[1].mana == 0 and not creature.ready)
+        s.players[2].board = { unit(99, card_id) }
+        creature.ready = true
+        local valid, reason = match.validate(s, 1,
+            { kind = "attack", attacker = creature.id, target = "hero" })
+        assert(valid == not card.guard)
+        if card.guard then assert(reason == "Defeat enemy Guards first.") end
+    end
 end)
 
 print(passed .. " tests passed")

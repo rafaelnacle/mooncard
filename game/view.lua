@@ -1,5 +1,6 @@
 local match = require("game.match")
 local animation = require("game.animation")
+local card_art = require("game.card_art")
 local view = {}
 local effect
 local hover = {}
@@ -106,15 +107,45 @@ function view.hit(state, x, y)
 end
 
 local function creature(r, card, health, label, edge, hovered)
-    box(r.x, r.y, r.w, r.h, hovered and "panel" or "card", edge)
-    text(card.cost, r.x + 10, r.y + 7, 22, "gold", 25)
-    text(card.guard and "GUARD" or "CREATURE", r.x + 39, r.y + 13, 12,
-        card.guard and "gold" or "muted", r.w - 47, "right")
-    text(card.name, r.x + 10, r.y + 42, 16, "ink", r.w - 20, "center")
-    text(card.attack .. " ATK", r.x + 10, r.y + r.h - 48, 14, "gold", 60)
-    text(health .. " HP", r.x + r.w - 65, r.y + r.h - 48, 14,
-        health < card.health and "red" or "green", 55, "right")
-    text(label, r.x + 5, r.y + r.h - 24, 12, edge == "green" and "green" or "muted", r.w - 10, "center")
+    local style = card_art.style(card)
+    local tint = style.color
+    love.graphics.setColor(tint[1] * 0.15 + 0.04, tint[2] * 0.15 + 0.04, tint[3] * 0.15 + 0.04, opacity)
+    card_art.frame("fill", r, card.guard)
+    love.graphics.setColor(tint[1], tint[2], tint[3], opacity * 0.65)
+    love.graphics.setLineWidth(card.guard and 2 or 1)
+    card_art.frame("line", r, card.guard)
+    -- Inner colored frame identifies the creature; the outer ring shows available actions.
+    if edge ~= "border" or hovered then
+        color(edge ~= "border" and edge or "ink")
+        love.graphics.setLineWidth(2)
+        card_art.frame("line", { x = r.x - 3, y = r.y - 3, w = r.w + 6, h = r.h + 6 }, card.guard)
+    end
+    love.graphics.setLineWidth(1)
+    love.graphics.setColor(tint[1], tint[2], tint[3], opacity * 0.13)
+    love.graphics.circle("fill", r.x + r.w / 2, r.y + 44, 21)
+    card_art.icon(style.symbol, r.x + r.w / 2, r.y + 44, 34, tint, opacity)
+
+    love.graphics.setColor(0.16, 0.26, 0.42, opacity)
+    love.graphics.polygon("fill", r.x + 18, r.y + 3, r.x + 32, r.y + 17,
+        r.x + 18, r.y + 31, r.x + 4, r.y + 17)
+    love.graphics.setColor(0.57, 0.76, 0.98, opacity)
+    love.graphics.polygon("line", r.x + 18, r.y + 3, r.x + 32, r.y + 17,
+        r.x + 18, r.y + 31, r.x + 4, r.y + 17)
+    text(card.cost, r.x + 4, r.y + 7, 18, "ink", 28, "center")
+    if card.guard then
+        card_art.icon("shield", r.x + r.w - 57, r.y + 14, 17, colors.gold, opacity)
+    end
+    text(style.role, r.x + 39, r.y + 8, 12, card.guard and "gold" or "muted", r.w - 46, "right")
+    text(card.name, r.x + 5, r.y + 68, 14, "ink", r.w - 10, "center")
+
+    local stat_y = r.y + r.h - 34
+    card_art.icon("sword", r.x + 17, stat_y, 17, colors.gold, opacity)
+    text(card.attack, r.x + 29, stat_y - 10, 18, "gold", 26)
+    card_art.icon("heart", r.x + r.w - 40, stat_y, 16,
+        health < card.health and colors.red or colors.green, opacity)
+    text(health, r.x + r.w - 28, stat_y - 10, 18,
+        health < card.health and "red" or "green", 24)
+    text(label, r.x + 5, r.y + r.h - (card.guard and 22 or 19), 12, edge == "green" and "green" or "muted", r.w - 10, "center")
 end
 
 local function find_region(state, side, id)
@@ -171,7 +202,8 @@ local function draw_effects(state)
             local r = find_region(state, damage.side, damage.id)
             r = r and visual_region(state, r) or find_region(effect.before, damage.side, damage.id)
             love.graphics.setColor(0.95, 0.35, 0.28, (1 - progress) * 0.4)
-            love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 8, 8)
+            local unit = damage.id ~= "hero" and match.unit(effect.before.players[damage.side], damage.id)
+            card_art.frame("fill", r, unit and match.cards[unit.card].guard)
             love.graphics.setFont(fonts[28])
             love.graphics.setColor(1, 0.65, 0.55, 1 - progress)
             love.graphics.printf("-" .. damage.amount, r.x, r.y - 10 - progress * 24, r.w, "center")
@@ -280,7 +312,12 @@ function view.draw(state, selected, notice)
                 16, state.active == 1 and "gold" or "muted", r.w, "center")
         end
     end
-    text("Summon. Defend.\nOutlast the Warden.", 26, 97, 14, "muted", 180)
+    card_art.icon("sword", 36, 98, 16, colors.gold)
+    text("Attack", 50, 91, 12, "muted", 65)
+    card_art.icon("heart", 124, 98, 14, colors.green)
+    text("Health", 137, 91, 12, "muted", 64)
+    card_art.icon("shield", 36, 126, 18, colors.gold)
+    text("Guard: attack first", 50, 119, 12, "muted", 160)
     text("Right-click: cancel\nEscape: quit", 26, 307, 12, "muted", 180)
     text("RECENT ACTIONS", 1094, 168, 12, "gold", 162)
     for i, message in ipairs(state.log) do
