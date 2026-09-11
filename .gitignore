@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+*.love
+/build/
+/dist/
+/.cache/
+.DS_Store
+*~
+*.swp
