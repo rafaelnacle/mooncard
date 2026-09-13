@@ -158,7 +158,7 @@ local function moved(r, x, y)
     return { x = x, y = y, w = r.w, h = r.h }
 end
 
-local function visual_region(state, r)
+local function visual_region(r)
     if not effect or effect.kind ~= "attack" or effect.elapsed < effect.impact or r.kind ~= "unit" then return r end
     local from = find_region(effect.before, r.side, r.id)
     local progress = animation.progress(effect)
@@ -200,7 +200,7 @@ local function draw_effects(state)
         end
         for _, damage in ipairs(effect.damage) do
             local r = find_region(state, damage.side, damage.id)
-            r = r and visual_region(state, r) or find_region(effect.before, damage.side, damage.id)
+            r = r and visual_region(r) or find_region(effect.before, damage.side, damage.id)
             love.graphics.setColor(0.95, 0.35, 0.28, (1 - progress) * 0.4)
             local unit = damage.id ~= "hero" and match.unit(effect.before.players[damage.side], damage.id)
             card_art.frame("fill", r, unit and match.cards[unit.card].guard)
@@ -292,7 +292,7 @@ function view.draw(state, selected, notice)
             local hidden = effect and ((effect.kind == "play" and unit.id == effect.summoned)
                 or (effect.kind == "attack" and effect.elapsed < effect.impact and unit.id == effect.attacker))
             if not hidden then
-                animated_creature(visual_region(state, r), match.cards[unit.card], unit.health, label, edge, hovered, 1)
+                animated_creature(visual_region(r), match.cards[unit.card], unit.health, label, edge, hovered, 1)
             end
         elseif r.kind == "hand" then
             local card = match.cards[state.players[1].hand[r.index]]
