@@ -25,6 +25,7 @@ Implement only the requested milestone. Keep changes small and understandable.
 
 - Run `love .` from the repository root for visual changes. Check appearance, responsiveness, Escape, the window close button, and relaunching.
 - Run `luajit tests/run.lua` for rule or AI changes. The dependency-free suite includes seeded complete matches. LuaJIT is a development test runner; playing needs only LÖVE. Add meaningful cases for new rules and regressions.
+- Keep tests grouped by responsibility in `tests/*_test.lua`, with shared fixtures/assertions in `tests/helpers.lua`. Each suite returns a function accepting `test(name, run)`; register new suites explicitly in `tests/run.lua`, which runs them and reports the total.
 - Report checks performed and anything unverified. Never describe an unrun check as passing.
 - Review `git diff --check`, the staged diff, and repository status before committing.
 
