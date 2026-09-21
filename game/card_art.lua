@@ -1,18 +1,7 @@
 -- Original geometric emblems. Drawing stays independent of combat rules.
 local art = {}
-local styles = {
-    ["Moon Wisp"] = { symbol = "moon", role = "SPIRIT", color = { 0.63, 0.68, 0.98 } },
-    ["Goblin Raider"] = { symbol = "blades", role = "RAIDER", color = { 0.93, 0.59, 0.35 } },
-    ["Grove Sentinel"] = { symbol = "leaf", role = "GUARD", color = { 0.40, 0.79, 0.58 } },
-    ["Stone Ogre"] = { symbol = "mountain", role = "BRUTE", color = { 0.72, 0.70, 0.62 } },
-    ["Dusk Wolf"] = { symbol = "wolf", role = "BEAST", color = { 0.55, 0.77, 0.89 } },
-    ["Iron Warder"] = { symbol = "tower", role = "GUARD", color = { 0.85, 0.73, 0.43 } },
-    ["Ember Drake"] = { symbol = "drake", role = "DRAGON", color = { 0.98, 0.43, 0.34 } },
-    ["Elder Treant"] = { symbol = "tree", role = "GUARD", color = { 0.67, 0.81, 0.37 } },
-}
-
 function art.style(card)
-    return assert(styles[card.name], "Missing card art: " .. card.name)
+    return assert(card.visual, "Missing card art: " .. card.name)
 end
 
 -- Icons use a normalized 32-unit canvas, so HUD badges and emblems share strokes.
@@ -24,7 +13,15 @@ function art.icon(symbol, x, y, size, tint, alpha)
     g.setColor(tint[1], tint[2], tint[3], alpha or 1)
     g.setLineWidth(2)
     g.setLineJoin("bevel")
-    if symbol == "shield" then
+    if symbol == "bolt" then
+        for _, triangle in ipairs(love.math.triangulate({ 2, -15, -11, 2, -2, 2, -6, 15, 12, -5, 3, -5 })) do
+            g.polygon("fill", triangle)
+        end
+    elseif symbol == "mend" then
+        g.rectangle("fill", -3, -11, 6, 22)
+        g.rectangle("fill", -11, -3, 22, 6)
+        g.circle("line", 0, 0, 15)
+    elseif symbol == "shield" then
         g.polygon("line", -11, -13, 11, -13, 10, 3, 0, 14, -10, 3)
         g.line(0, -8, 0, 7)
         g.line(-6, -2, 6, -2)

@@ -5,17 +5,28 @@ Implement only the requested milestone. Keep changes small and understandable.
 
 ## Code and architecture
 
-- Keep `main.lua` as the LÖVE input/update entry point and `conf.lua` as window configuration. Rules live in `game/match.lua`, computer decisions in `game/ai.lua`, drawing/layout in `game/view.lua`, and presentation snapshots/timing in `game/animation.lua`. Avoid speculative abstractions and empty directories.
+- Keep `main.lua` as the LÖVE input/update entry point and `conf.lua` as window configuration. Avoid speculative abstractions and empty directories.
+- Card definitions and the starter deck live in `game/cards.lua`. Match flow and action validation live in `game/match.lua`; spell targeting and resolution in `game/spells.lua`; computer decisions in `game/ai.lua`. These modules must work without LÖVE.
+- Drawing lives in `game/view.lua`, board/hand geometry in `game/layout.lua`, presentation snapshots/timing in `game/animation.lua`, and card preview content/layout in `game/inspection.lua`.
+- The title menu lives in `game/screens/menu.lua`; `main.lua` routes callbacks to the active screen. Only start a match when Play is chosen. Returning to the menu clears match selections, notices and animations; game rules and AI must not update there.
 - Use LuaJIT-compatible Lua, four-space indentation, `snake_case` names, local variables, and small functions. Keep LÖVE callback names as required by its API.
 - Use LÖVE alone initially. Explain the need for any additional dependency before adding it.
-- Keep animations separate from rules. Apply legal actions once, then animate a presentation snapshot; block new gameplay actions during the short transition and clear effects on restart.
-- Keep pure Lua rules separate from drawing and input. Human input and AI must use the same rule validation.
+- Keep animations separate from rules. Apply legal actions once, then animate the returned outcomes against a presentation snapshot; never recalculate damage in animation code. Block new gameplay actions during the short transition and clear effects on restart.
+- Keep pure Lua rules separate from drawing and input. Human input and AI must use the same rule validation, including spell targets and healing caps. Card inspection must only expose the human hand and public board cards; selecting or cancelling a spell must not spend resources.
 - Use original or appropriately licensed assets. Creature emblems and card frames are drawn in `game/card_art.lua`; keep appearance out of the combat rules. Use the built-in font and LÖVE shapes for the current cards.
+
+## Extending the game
+
+- To add a card with an existing mechanic, add an explicit, unused numeric ID in `game/cards.lua`, including `kind`, stats/effect and `visual` metadata. Keep existing IDs stable; display names are not identifiers. Treat definitions as read-only during play. Reuse an emblem or add its drawing in `game/card_art.lua`.
+- Add cards to `starter_deck` explicitly; catalog entries do not automatically join the deck. Preserve deck order unless intentionally changing seeded deals. Update roster/deck expectations in tests when changing the starter content.
+- For a new spell effect, define targeting, validation, resolution and descriptive text in `game/spells.lua`; add its AI scoring in `game/ai.lua` and any new presentation in `game/view.lua`/`game/animation.lua`. Unknown effects must fail clearly rather than inherit another effect's rules. Test both sides, invalid actions without mutation, and resolved outcomes.
+- `match.apply` returns `true, nil, events` on success or `false, reason` on rejection. Events are ordered, temporary presentation data: damage/heal use `{ kind, side, id, amount }`, death/summon use `{ kind, side, id }`, and draw uses `{ kind, side, hand }`. Hero IDs are `"hero"`; unit IDs identify instances. Damage includes overkill, healing reports only restored health, and burned draws emit no draw event. Keep events free of references to live mutable state.
 
 ## Verification
 
 - Run `love .` from the repository root for visual changes. Check appearance, responsiveness, Escape, the window close button, and relaunching.
 - Run `luajit tests/run.lua` for rule or AI changes. The dependency-free suite includes seeded complete matches. LuaJIT is a development test runner; playing needs only LÖVE. Add meaningful cases for new rules and regressions.
+- Keep tests grouped by responsibility in `tests/*_test.lua`, with shared fixtures/assertions in `tests/helpers.lua`. Each suite returns a function accepting `test(name, run)`; register new suites explicitly in `tests/run.lua`, which runs them and reports the total.
 - Report checks performed and anything unverified. Never describe an unrun check as passing.
 - Review `git diff --check`, the staged diff, and repository status before committing.
 

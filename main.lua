@@ -2,32 +2,49 @@ local match = require("game.match")
 local ai = require("game.ai")
 local view = require("game.view")
 local animation = require("game.animation")
+local menu = require("game.screens.menu")
+local screen = "menu"
 local state
 local selected
+local selected_spell
 local notice
 local notice_time = 0
 local ai_time = 0
 
 local function restart()
     state = match.new(love.math.random)
-    selected, notice = nil, nil
+    selected, selected_spell, notice = nil, nil, nil
     ai_time, notice_time = 0, 0
     view.reset()
+    screen = "match"
+end
+
+local function show_menu()
+    state, selected, selected_spell, notice = nil, nil, nil, nil
+    ai_time, notice_time = 0, 0
+    view.reset()
+    menu.enter()
+    screen = "menu"
+end
+
+local function menu_action(action)
+    if action == "play" then restart()
+    elseif action == "quit" then love.event.quit() end
 end
 
 local function apply_action(side, action)
     local valid, reason = match.validate(state, side, action)
     if not valid then return false, reason end
     local before = animation.snapshot(state)
-    local ok, error_message = match.apply(state, side, action)
-    if ok then view.animate(before, state, side, action) end
+    local ok, error_message, events = match.apply(state, side, action)
+    if ok then view.animate(before, side, action, events) end
     return ok, error_message
 end
 
 local function act(action)
     local ok, reason = apply_action(1, action)
     if ok then
-        selected, notice = nil, nil
+        selected, selected_spell, notice = nil, nil, nil
         ai_time = 0
     else
         notice, notice_time = reason, 3
@@ -36,10 +53,12 @@ end
 
 function love.load()
     view.load()
-    restart()
+    menu.load()
+    show_menu()
 end
 
 function love.update(dt)
+    if screen == "menu" then menu.update(dt); return end
     view.update(dt, state)
     if notice then
         notice_time = notice_time - dt
@@ -56,21 +75,40 @@ function love.update(dt)
 end
 
 function love.draw()
-    view.draw(state, selected, notice)
+    if screen == "menu" then menu.draw(); return end
+    view.draw(state, selected, notice, selected_spell)
 end
 
 function love.mousepressed(x, y, button)
-    if button == 2 then selected, notice = nil, nil; return end
+    if screen == "menu" then menu_action(menu.mousepressed(x, y, button)); return end
+    if button == 2 then selected, selected_spell, notice = nil, nil, nil; return end
     if button ~= 1 or view.busy() then return end
     local hit = view.hit(state, x, y)
     if not hit then return end
     if hit.kind == "restart" then restart(); return end
+    if hit.kind == "menu" then show_menu(); return end
     if state.winner then return end
     if state.active ~= 1 then notice, notice_time = "Wait for your turn.", 2; return end
     if hit.kind == "hand" then
-        act({ kind = "play", hand = hit.index })
+        local card = match.cards[state.players[1].hand[hit.index]]
+        if card.kind == "spell" then
+            if selected_spell == hit.index then
+                selected_spell, notice = nil, nil
+            else
+                local valid, reason = match.can_play(state, 1, hit.index)
+                if valid then
+                    selected, selected_spell, notice = nil, hit.index, nil
+                else
+                    notice, notice_time = reason, 3
+                end
+            end
+        else
+            act({ kind = "play", hand = hit.index })
+        end
     elseif hit.kind == "end_turn" then
         act({ kind = "end_turn" })
+    elseif selected_spell and (hit.kind == "unit" or hit.kind == "hero") then
+        act({ kind = "cast", hand = selected_spell, target = hit.kind == "hero" and "hero" or hit.id })
     elseif hit.kind == "unit" and hit.side == 1 then
         local unit = match.unit(state.players[1], hit.id)
         if not unit.ready then
@@ -84,6 +122,11 @@ function love.mousepressed(x, y, button)
     end
 end
 
+function love.mousemoved(x, y)
+    if screen == "menu" then menu.mousemoved(x, y) end
+end
+
 function love.keypressed(key)
-    if key == "escape" then love.event.quit() end
+    if key == "escape" then love.event.quit(); return end
+    if screen == "menu" then menu_action(menu.keypressed(key)) end
 end
