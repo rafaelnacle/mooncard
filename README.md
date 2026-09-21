@@ -26,6 +26,9 @@ From the project directory:
 love .
 ```
 
+Choose **Play** from the main menu to start a duel, or **Quit** to exit.
+Use the mouse or the arrow keys and **Enter** to choose a menu option.
+
 Hover over a card in your hand or a creature on the board for a larger preview
 with its ability, stats, and current status.
 
@@ -45,5 +48,6 @@ Click **End turn** when finished. Mana refills and its maximum increases each
 turn, up to six. You draw a card each turn; a full seven-card hand discards
 extra draws. An empty deck causes increasing fatigue damage.
 
-Right-click to cancel selection. Click **Play again** after a duel to restart.
+Right-click to cancel selection. After a duel, click **Play again** to restart
+or **Main menu** to return to the title screen.
 Press **Escape** or close the window to quit.

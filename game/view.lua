@@ -374,12 +374,14 @@ function view.draw(state, selected, notice, selected_spell)
     if winner then
         love.graphics.setColor(0.015, 0.025, 0.035, 0.88)
         love.graphics.rectangle("fill", 0, 0, 1280, 720)
-        box(410, 246, 460, 235, "panel", "gold")
+        box(410, 246, 460, 289, "panel", "gold")
         text(winner == 1 and "Victory" or "Defeat", 430, 274, 28, "gold", 420, "center")
         text(winner == 1 and "The grove is yours." or "The Warden holds the grove.", 430, 324, 18, "ink", 420, "center")
         text("A fresh deck. Another duel.", 430, 365, 14, "muted", 420, "center")
         box(530, 411, 220, 46, "card", "gold")
         text("Play again", 530, 424, 16, "gold", 220, "center")
+        box(530, 471, 220, 42, "card")
+        text("Main menu", 530, 482, 16, "ink", 220, "center")
     end
 end
 

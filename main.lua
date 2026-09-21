@@ -2,6 +2,8 @@ local match = require("game.match")
 local ai = require("game.ai")
 local view = require("game.view")
 local animation = require("game.animation")
+local menu = require("game.screens.menu")
+local screen = "menu"
 local state
 local selected
 local selected_spell
@@ -14,6 +16,20 @@ local function restart()
     selected, selected_spell, notice = nil, nil, nil
     ai_time, notice_time = 0, 0
     view.reset()
+    screen = "match"
+end
+
+local function show_menu()
+    state, selected, selected_spell, notice = nil, nil, nil, nil
+    ai_time, notice_time = 0, 0
+    view.reset()
+    menu.enter()
+    screen = "menu"
+end
+
+local function menu_action(action)
+    if action == "play" then restart()
+    elseif action == "quit" then love.event.quit() end
 end
 
 local function apply_action(side, action)
@@ -37,10 +53,12 @@ end
 
 function love.load()
     view.load()
-    restart()
+    menu.load()
+    show_menu()
 end
 
 function love.update(dt)
+    if screen == "menu" then menu.update(dt); return end
     view.update(dt, state)
     if notice then
         notice_time = notice_time - dt
@@ -57,15 +75,18 @@ function love.update(dt)
 end
 
 function love.draw()
+    if screen == "menu" then menu.draw(); return end
     view.draw(state, selected, notice, selected_spell)
 end
 
 function love.mousepressed(x, y, button)
+    if screen == "menu" then menu_action(menu.mousepressed(x, y, button)); return end
     if button == 2 then selected, selected_spell, notice = nil, nil, nil; return end
     if button ~= 1 or view.busy() then return end
     local hit = view.hit(state, x, y)
     if not hit then return end
     if hit.kind == "restart" then restart(); return end
+    if hit.kind == "menu" then show_menu(); return end
     if state.winner then return end
     if state.active ~= 1 then notice, notice_time = "Wait for your turn.", 2; return end
     if hit.kind == "hand" then
@@ -101,6 +122,11 @@ function love.mousepressed(x, y, button)
     end
 end
 
+function love.mousemoved(x, y)
+    if screen == "menu" then menu.mousemoved(x, y) end
+end
+
 function love.keypressed(key)
-    if key == "escape" then love.event.quit() end
+    if key == "escape" then love.event.quit(); return end
+    if screen == "menu" then menu_action(menu.keypressed(key)) end
 end

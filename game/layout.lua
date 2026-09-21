@@ -25,7 +25,10 @@ function layout.regions(state, include_board)
             x = start + (i - 1) * 148, y = 548, w = 138, h = 130 })
     end
     if state.winner and not include_board then
-        return { { kind = "restart", x = 530, y = 411, w = 220, h = 46 } }
+        return {
+            { kind = "restart", x = 530, y = 411, w = 220, h = 46 },
+            { kind = "menu", x = 530, y = 471, w = 220, h = 42 },
+        }
     end
     return regions
 end

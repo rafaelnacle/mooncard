@@ -12,6 +12,7 @@ local suites = {
     "tests.animation_test",
     "tests.layout_test",
     "tests.inspection_test",
+    "tests.menu_test",
 }
 
 for _, name in ipairs(suites) do

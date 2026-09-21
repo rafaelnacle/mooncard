@@ -8,6 +8,7 @@ Implement only the requested milestone. Keep changes small and understandable.
 - Keep `main.lua` as the LÖVE input/update entry point and `conf.lua` as window configuration. Avoid speculative abstractions and empty directories.
 - Card definitions and the starter deck live in `game/cards.lua`. Match flow and action validation live in `game/match.lua`; spell targeting and resolution in `game/spells.lua`; computer decisions in `game/ai.lua`. These modules must work without LÖVE.
 - Drawing lives in `game/view.lua`, board/hand geometry in `game/layout.lua`, presentation snapshots/timing in `game/animation.lua`, and card preview content/layout in `game/inspection.lua`.
+- The title menu lives in `game/screens/menu.lua`; `main.lua` routes callbacks to the active screen. Only start a match when Play is chosen. Returning to the menu clears match selections, notices and animations; game rules and AI must not update there.
 - Use LuaJIT-compatible Lua, four-space indentation, `snake_case` names, local variables, and small functions. Keep LÖVE callback names as required by its API.
 - Use LÖVE alone initially. Explain the need for any additional dependency before adding it.
 - Keep animations separate from rules. Apply legal actions once, then animate the returned outcomes against a presentation snapshot; never recalculate damage in animation code. Block new gameplay actions during the short transition and clear effects on restart.

@@ -22,7 +22,8 @@ return function(test)
             end
         end
         s.winner = 1
-        assert(#view.regions(s) == 1 and view.hit(s, 640, 434).kind == "restart")
+        assert(#view.regions(s) == 2 and view.hit(s, 640, 434).kind == "restart")
+        assert(view.hit(s, 640, 492).kind == "menu")
         assert(not view.hit(s, 1170, 460))
     end)
 end
