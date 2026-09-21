@@ -1,4 +1,5 @@
 local match = require("game.match")
+local spells = require("game.spells")
 local inspection = {}
 
 function inspection.describe(state, region)
@@ -15,11 +16,7 @@ function inspection.describe(state, region)
     if not card then return nil end
     local details = { card = card, health = unit and unit.health or card.health }
     if card.kind == "spell" then
-        if card.effect == "damage" then
-            details.description = "Deal " .. card.amount .. " damage to an enemy creature. Ignores Guard. Cannot target heroes."
-        else
-            details.description = "Restore up to " .. card.amount .. " health to a wounded friendly creature, capped at its starting health. Cannot target heroes."
-        end
+        details.description = spells.description(card)
     elseif card.guard then
         details.description = "Guard: enemies must attack this creature first. Guard does not block spells.\n\nCan attack once per turn."
     else

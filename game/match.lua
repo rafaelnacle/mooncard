@@ -1,17 +1,8 @@
+local cards = require("game.cards")
+local spells = require("game.spells")
 local match = {}
 
-match.cards = {
-    { name = "Moon Wisp", cost = 1, attack = 1, health = 2 },
-    { name = "Goblin Raider", cost = 2, attack = 3, health = 2 },
-    { name = "Grove Sentinel", cost = 3, attack = 2, health = 5, guard = true },
-    { name = "Stone Ogre", cost = 4, attack = 5, health = 4 },
-    { name = "Dusk Wolf", cost = 2, attack = 2, health = 3 },
-    { name = "Iron Warder", cost = 2, attack = 1, health = 4, guard = true },
-    { name = "Ember Drake", cost = 5, attack = 6, health = 4 },
-    { name = "Elder Treant", cost = 6, attack = 4, health = 8, guard = true },
-    { name = "Ember Bolt", kind = "spell", cost = 2, effect = "damage", amount = 3 },
-    { name = "Mending Light", kind = "spell", cost = 1, effect = "heal", amount = 3 },
-}
+match.cards = cards.definitions
 
 local function announce(state, message)
     state.message = message
@@ -25,11 +16,18 @@ local function check_winner(state)
     end
 end
 
-local function draw(state, side)
+local function emit(events, kind, side, id, amount)
+    if events then
+        table.insert(events, { kind = kind, side = side, id = id, amount = amount })
+    end
+end
+
+local function draw(state, side, events)
     local player = state.players[side]
     if #player.deck == 0 then
         player.fatigue = player.fatigue + 1
         player.health = player.health - player.fatigue
+        emit(events, "damage", side, "hero", player.fatigue)
         announce(state, player.name .. (side == 1 and " take " or " takes ") .. player.fatigue .. " fatigue damage.")
         check_winner(state)
         return
@@ -37,19 +35,20 @@ local function draw(state, side)
     local card = table.remove(player.deck)
     if #player.hand < 7 then
         table.insert(player.hand, card)
+        if events then table.insert(events, { kind = "draw", side = side, hand = #player.hand }) end
     else
         announce(state, player.name .. (side == 1 and " discard " or " discards ") .. match.cards[card].name .. ": hand full.")
     end
 end
 
-local function begin_turn(state)
+local function begin_turn(state, events)
     local player = state.players[state.active]
     state.turn = state.turn + 1
     player.max_mana = math.min(6, player.max_mana + 1)
     player.mana = player.max_mana
     for _, unit in ipairs(player.board) do unit.ready = true end
     announce(state, player.name .. (state.active == 1 and " begin turn " or " begins turn ") .. state.turn .. ".")
-    draw(state, state.active)
+    draw(state, state.active, events)
 end
 
 function match.new(random)
@@ -61,8 +60,8 @@ function match.new(random)
             health = 20, mana = 0, max_mana = 0, fatigue = 0,
             deck = {}, hand = {}, board = {},
         }
-        for card = 1, #match.cards do
-            for _ = 1, 2 do table.insert(player.deck, card) end
+        for _, entry in ipairs(cards.starter_deck) do
+            for _ = 1, entry.count do table.insert(player.deck, entry.card) end
         end
         for i = #player.deck, 2, -1 do
             local j = random(i)
@@ -90,11 +89,11 @@ function match.can_play(state, side, hand)
     if card.kind ~= "spell" and #player.board >= 5 then return false, "Your board is full." end
     if player.mana < card.cost then return false, "Not enough mana." end
     if card.kind == "spell" then
-        local target_side = card.effect == "heal" and side or 3 - side
+        local target_side = spells.target_side(card, side)
         for _, target in ipairs(state.players[target_side].board) do
-            if card.effect == "damage" or target.health < match.cards[target.card].health then return true end
+            if spells.validate_target(card, target) then return true end
         end
-        return false, card.effect == "heal" and "No wounded friendly creature to heal." or "No enemy creature to target."
+        return false, spells.no_targets(card)
     end
     return true
 end
@@ -113,15 +112,9 @@ function match.validate(state, side, action)
             return true
         end
         if card.kind ~= "spell" then return false, "That card is a creature, not a spell." end
-        local target_side = card.effect == "heal" and side or 3 - side
+        local target_side = spells.target_side(card, side)
         local target = match.unit(state.players[target_side], action.target)
-        if not target then
-            return false, card.effect == "heal" and "Choose a wounded friendly creature." or "Choose an enemy creature."
-        end
-        if card.effect == "heal" and target.health >= match.cards[target.card].health then
-            return false, "That creature is already at full health."
-        end
-        return true
+        return spells.validate_target(card, target)
     end
     if action.kind == "attack" then
         local attacker = match.unit(player, action.attacker)
@@ -141,19 +134,26 @@ function match.validate(state, side, action)
     return false, "Unknown action."
 end
 
-local function remove_dead(player)
+local function remove_dead(state, side, events)
+    local player = state.players[side]
     for i = #player.board, 1, -1 do
-        if player.board[i].health <= 0 then table.remove(player.board, i) end
+        if player.board[i].health <= 0 then
+            emit(events, "death", side, player.board[i].id)
+            table.remove(player.board, i)
+        end
     end
 end
 
+-- Success returns true, nil, events. Failure returns false, reason without mutation.
+-- Events describe resolved outcomes; presentation must never reconstruct combat rules.
 function match.apply(state, side, action)
     local valid, reason = match.validate(state, side, action)
     if not valid then return false, reason end
+    local events = {}
     local player, enemy = state.players[side], state.players[3 - side]
     if action.kind == "end_turn" then
         state.active = 3 - side
-        begin_turn(state)
+        begin_turn(state, events)
     elseif action.kind == "play" then
         local card_id = table.remove(player.hand, action.hand)
         local card = match.cards[card_id]
@@ -161,42 +161,41 @@ function match.apply(state, side, action)
         table.insert(player.board, {
             id = state.next_id, card = card_id, health = card.health, ready = false,
         })
+        emit(events, "summon", side, state.next_id)
         state.next_id = state.next_id + 1
         announce(state, player.name .. (side == 1 and " summon " or " summons ") .. card.name .. ".")
     elseif action.kind == "cast" then
         local card = match.cards[table.remove(player.hand, action.hand)]
-        local target_player = card.effect == "heal" and player or enemy
-        local target = match.unit(target_player, action.target)
+        local target_side = spells.target_side(card, side)
+        local target = match.unit(state.players[target_side], action.target)
         player.mana = player.mana - card.cost
-        local target_name = match.cards[target.card].name
-        if card.effect == "heal" then
-            local healed = math.min(card.amount, match.cards[target.card].health - target.health)
-            target.health = target.health + healed
-            announce(state, card.name .. " restores " .. healed .. " health to " .. target_name .. ".")
-        else
-            target.health = target.health - card.amount
-            remove_dead(target_player)
-            announce(state, card.name .. " deals " .. card.amount .. " damage to " .. target_name .. ".")
-        end
+        local outcome, message = spells.resolve(card, target)
+        outcome.side, outcome.id = target_side, target.id
+        table.insert(events, outcome)
+        remove_dead(state, target_side, events)
+        announce(state, message)
     elseif action.kind == "attack" then
         local attacker = match.unit(player, action.attacker)
         local card = match.cards[attacker.card]
         attacker.ready = false
         if action.target == "hero" then
             enemy.health = enemy.health - card.attack
+            emit(events, "damage", 3 - side, "hero", card.attack)
             announce(state, card.name .. " hits " .. (side == 2 and "you" or enemy.name) .. " for " .. card.attack .. ".")
         else
             local target = match.unit(enemy, action.target)
             local target_card = match.cards[target.card]
             target.health = target.health - card.attack
             attacker.health = attacker.health - target_card.attack
+            emit(events, "damage", side, attacker.id, target_card.attack)
+            emit(events, "damage", 3 - side, target.id, card.attack)
             announce(state, card.name .. " attacks " .. target_card.name .. ".")
-            remove_dead(player)
-            remove_dead(enemy)
+            remove_dead(state, side, events)
+            remove_dead(state, 3 - side, events)
         end
         check_winner(state)
     end
-    return true
+    return true, nil, events
 end
 
 function match.legal_actions(state, side)
@@ -208,7 +207,7 @@ function match.legal_actions(state, side)
     for i, card_id in ipairs(state.players[side].hand) do
         local card = match.cards[card_id]
         if card.kind == "spell" then
-            local target_side = card.effect == "heal" and side or 3 - side
+            local target_side = spells.target_side(card, side)
             for _, target in ipairs(state.players[target_side].board) do
                 add({ kind = "cast", hand = i, target = target.id })
             end

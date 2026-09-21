@@ -1,20 +1,7 @@
 -- Original geometric emblems. Drawing stays independent of combat rules.
 local art = {}
-local styles = {
-    ["Ember Bolt"] = { symbol = "bolt", role = "SPELL", color = { 1.0, 0.53, 0.26 } },
-    ["Mending Light"] = { symbol = "mend", role = "SPELL", color = { 0.43, 0.93, 0.78 } },
-    ["Moon Wisp"] = { symbol = "moon", role = "SPIRIT", color = { 0.63, 0.68, 0.98 } },
-    ["Goblin Raider"] = { symbol = "blades", role = "RAIDER", color = { 0.93, 0.59, 0.35 } },
-    ["Grove Sentinel"] = { symbol = "leaf", role = "GUARD", color = { 0.40, 0.79, 0.58 } },
-    ["Stone Ogre"] = { symbol = "mountain", role = "BRUTE", color = { 0.72, 0.70, 0.62 } },
-    ["Dusk Wolf"] = { symbol = "wolf", role = "BEAST", color = { 0.55, 0.77, 0.89 } },
-    ["Iron Warder"] = { symbol = "tower", role = "GUARD", color = { 0.85, 0.73, 0.43 } },
-    ["Ember Drake"] = { symbol = "drake", role = "DRAGON", color = { 0.98, 0.43, 0.34 } },
-    ["Elder Treant"] = { symbol = "tree", role = "GUARD", color = { 0.67, 0.81, 0.37 } },
-}
-
 function art.style(card)
-    return assert(styles[card.name], "Missing card art: " .. card.name)
+    return assert(card.visual, "Missing card art: " .. card.name)
 end
 
 -- Icons use a normalized 32-unit canvas, so HUD badges and emblems share strokes.

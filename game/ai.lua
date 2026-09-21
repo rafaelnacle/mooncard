@@ -1,4 +1,5 @@
 local match = require("game.match")
+local spells = require("game.spells")
 local ai = {}
 
 function ai.choose(state, side)
@@ -11,12 +12,12 @@ function ai.choose(state, side)
             score = 20 + card.cost
         elseif action.kind == "cast" then
             local card = match.cards[player.hand[action.hand]]
-            local target = match.unit(card.effect == "heal" and player or enemy, action.target)
+            local target = match.unit(state.players[spells.target_side(card, side)], action.target)
             local target_card = match.cards[target.card]
             if card.effect == "heal" then
                 local restored = math.min(card.amount, target_card.health - target.health)
                 score = restored * 5 + (target_card.guard and 7 or 0)
-            else
+            elseif card.effect == "damage" then
                 local kills = card.amount >= target.health
                 local follow_up = false
                 for _, unit in ipairs(player.board) do

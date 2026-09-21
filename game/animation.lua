@@ -1,4 +1,5 @@
 local match = require("game.match")
+local spells = require("game.spells")
 local animation = {}
 
 function animation.snapshot(value)
@@ -8,56 +9,32 @@ function animation.snapshot(value)
     return copy
 end
 
-function animation.new(before, after, side, action)
+function animation.new(before, side, action, events)
     local effect = {
         before = before, side = side, kind = action.kind,
         elapsed = 0, duration = 0.4, impact = action.kind == "attack" and 0.16 or 0,
         attacker = action.attacker, target = action.target, hand = action.hand,
         damage = {}, dead = {}, healing = {},
     }
-    if action.kind == "play" then effect.summoned = after.next_id - 1 end
     if action.kind == "cast" then
         effect.spell = match.cards[before.players[side].hand[action.hand]]
-        effect.target_side = effect.spell.effect == "heal" and side or 3 - side
+        effect.target_side = spells.target_side(effect.spell, side)
     end
-    for player_side, player in ipairs(before.players) do
-        local next_player = after.players[player_side]
-        local hero_damage = player.health - next_player.health
-        if hero_damage > 0 then
-            table.insert(effect.damage, { side = player_side, id = "hero", amount = hero_damage })
-        end
-        for _, unit in ipairs(player.board) do
-            local survivor
-            for _, next_unit in ipairs(next_player.board) do
-                if next_unit.id == unit.id then survivor = next_unit; break end
-            end
-            if not survivor then table.insert(effect.dead, { side = player_side, unit = unit }) end
-            local amount = survivor and unit.health - survivor.health or 0
-            if not survivor and action.kind == "attack" then
-                local other_side = unit.id == action.attacker and 3 - side or side
-                local other_id = unit.id == action.attacker and action.target or action.attacker
-                for _, other in ipairs(before.players[other_side].board) do
-                    if other.id == other_id then
-                        amount = match.cards[other.card].attack
-                    end
-                end
-            end
-            if not survivor and effect.spell then amount = effect.spell.amount end
-            if amount < 0 then
-                table.insert(effect.healing, { side = player_side, id = unit.id, amount = -amount })
-            end
-            if amount > 0 then
-                table.insert(effect.damage, { side = player_side, id = unit.id, amount = amount })
-            end
+    for _, event in ipairs(events) do
+        if event.kind == "damage" and event.amount > 0 then
+            table.insert(effect.damage, { side = event.side, id = event.id, amount = event.amount })
+        elseif event.kind == "heal" and event.amount > 0 then
+            table.insert(effect.healing, { side = event.side, id = event.id, amount = event.amount })
+        elseif event.kind == "death" then
+            local unit = match.unit(before.players[event.side], event.id)
+            if unit then table.insert(effect.dead, { side = event.side, unit = unit }) end
+        elseif event.kind == "summon" then
+            effect.summoned = event.id
+        elseif event.kind == "draw" then
+            effect.drawn_side, effect.drawn_hand = event.side, event.hand
         end
     end
-    if action.kind == "end_turn" then
-        local next_side = after.active
-        if #after.players[next_side].hand > #before.players[next_side].hand then
-            effect.drawn_side, effect.drawn_hand = next_side, #after.players[next_side].hand
-        end
-        effect.duration = 0.3
-    end
+    if action.kind == "end_turn" then effect.duration = 0.3 end
     return effect
 end
 

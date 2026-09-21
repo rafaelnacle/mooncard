@@ -20,8 +20,8 @@ local function apply_action(side, action)
     local valid, reason = match.validate(state, side, action)
     if not valid then return false, reason end
     local before = animation.snapshot(state)
-    local ok, error_message = match.apply(state, side, action)
-    if ok then view.animate(before, state, side, action) end
+    local ok, error_message, events = match.apply(state, side, action)
+    if ok then view.animate(before, side, action, events) end
     return ok, error_message
 end
 

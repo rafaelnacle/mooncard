@@ -22,8 +22,9 @@ local function snapshot(value)
 end
 local function reject(state, side, action, reason)
     local before = snapshot(state)
-    local ok, error_message = match.apply(state, side, action)
+    local ok, error_message, events = match.apply(state, side, action)
     assert(not ok and error_message == reason, error_message)
+    assert(events == nil, "Rejected action emitted outcomes")
     assert(snapshot(state) == before, "Rejected action mutated state")
 end
 
@@ -196,8 +197,10 @@ test("summon animation preserves its source snapshot and finishes after a long f
     s.players[1].hand = { 1 }
     local before = animation.snapshot(s)
     local action = { kind = "play", hand = 1 }
-    assert(match.apply(s, 1, action))
-    local effect = animation.new(before, s, 1, action)
+    local ok, reason, events = match.apply(s, 1, action)
+    assert(ok, reason)
+    assert(events)
+    local effect = animation.new(before, 1, action, events)
     assert(effect.summoned == s.players[1].board[1].id)
     assert(#before.players[1].hand == 1 and #before.players[1].board == 0)
     local state_before = snapshot(s)
@@ -214,8 +217,10 @@ test("combat animation retains both dead cards and simultaneous damage", functio
     s.players[2].board = { unit(2, 2) }
     local before = animation.snapshot(s)
     local action = { kind = "attack", attacker = 1, target = 2 }
-    assert(match.apply(s, 1, action))
-    local effect = animation.new(before, s, 1, action)
+    local ok, reason, events = match.apply(s, 1, action)
+    assert(ok, reason)
+    assert(events)
+    local effect = animation.new(before, 1, action, events)
     assert(#effect.dead == 2 and #effect.damage == 2)
     assert(effect.damage[1].amount == 3 and effect.damage[2].amount == 3)
     animation.update(effect, 0.1)
@@ -232,8 +237,10 @@ test("hero lethal and fatigue animate without inventing dead creatures", functio
     s.players[2].health = 5
     local before = animation.snapshot(s)
     local action = { kind = "attack", attacker = 1, target = "hero" }
-    assert(match.apply(s, 1, action))
-    local effect = animation.new(before, s, 1, action)
+    local ok, reason, events = match.apply(s, 1, action)
+    assert(ok, reason)
+    assert(events)
+    local effect = animation.new(before, 1, action, events)
     assert(s.winner == 1 and not before.winner)
     assert(#effect.dead == 0 and #effect.damage == 1)
     assert(effect.damage[1].id == "hero" and effect.damage[1].amount == 5)
@@ -241,8 +248,10 @@ test("hero lethal and fatigue animate without inventing dead creatures", functio
     s.players[2].deck = {}
     before = animation.snapshot(s)
     action = { kind = "end_turn" }
-    assert(match.apply(s, 1, action))
-    effect = animation.new(before, s, 1, action)
+    ok, reason, events = match.apply(s, 1, action)
+    assert(ok, reason)
+    assert(events)
+    effect = animation.new(before, 1, action, events)
     assert(not effect.drawn_hand and effect.damage[1].amount == 1)
 end)
 
@@ -343,14 +352,18 @@ test("spell animations retain lethal targets and show actual capped healing", fu
     s.players[2].board = { unit(2, 2) }
     local before = animation.snapshot(s)
     local action = { kind = "cast", hand = 1, target = 2 }
-    assert(match.apply(s, 1, action))
-    local effect = animation.new(before, s, 1, action)
+    local ok, reason, events = match.apply(s, 1, action)
+    assert(ok, reason)
+    assert(events)
+    local effect = animation.new(before, 1, action, events)
     assert(effect.kind == "cast" and effect.target_side == 2)
     assert(#effect.dead == 1 and effect.damage[1].amount == 3 and #effect.healing == 0)
     before = animation.snapshot(s)
     action = { kind = "cast", hand = 1, target = 1 }
-    assert(match.apply(s, 1, action))
-    effect = animation.new(before, s, 1, action)
+    ok, reason, events = match.apply(s, 1, action)
+    assert(ok, reason)
+    assert(events)
+    effect = animation.new(before, 1, action, events)
     assert(effect.target_side == 1 and #effect.damage == 0 and effect.healing[1].amount == 1)
 end)
 
@@ -377,6 +390,114 @@ test("inspection explains public cards and fits at screen edges", function()
     assert(not inspection.describe(s, nil))
     assert(not inspection.describe(s, { kind = "hand", side = 2, index = 1 }))
     assert(snapshot(s) == before)
+end)
+
+test("new catalog entries keep stable identities and do not silently join starter decks", function()
+    local cards = require("game.cards")
+    local art = require("game.card_art")
+    local animation = require("game.animation")
+    local baseline = snapshot(fresh())
+    local extra_id = 101
+    assert(not cards.definitions[extra_id])
+    local extra = animation.snapshot(cards.definitions[1])
+    extra.name = "Test Spirit"
+    cards.definitions[extra_id] = extra
+    assert(snapshot(fresh()) == baseline, "Catalog addition changed starter decks")
+    local s = fresh()
+    s.players[1].hand = { extra_id }
+    assert(match.apply(s, 1, { kind = "play", hand = 1 }))
+    assert(s.players[1].board[1].card == extra_id)
+    assert(art.style(extra).symbol == "moon", "Renaming a card broke its appearance")
+    cards.definitions[extra_id] = nil
+end)
+
+test("spell variants reuse targeting, amounts and explanations from either side", function()
+    local cards = require("game.cards")
+    local spells = require("game.spells")
+    local animation = require("game.animation")
+    local extra_id = 101
+    for _, template in ipairs({ 9, 10 }) do
+        local extra = animation.snapshot(cards.definitions[template])
+        extra.name, extra.cost, extra.amount = "Test Spell", 1, 2
+        cards.definitions[extra_id] = extra
+        assert(spells.description(extra):find("2", 1, true))
+        for side = 1, 2 do
+            local s = fresh()
+            s.active = side
+            s.players[side].hand, s.players[side].mana = { extra_id }, 1
+            local target_side = template == 9 and 3 - side or side
+            s.players[target_side].board = { unit(50, 3, 2) }
+            assert(match.can_play(s, side, 1))
+            local action = { kind = "cast", hand = 1, target = 50 }
+            assert(match.validate(s, side, action))
+            local ok, reason, events = match.apply(s, side, action)
+            assert(ok, reason)
+            assert(events)
+            assert(events[1].side == target_side and events[1].id == 50 and events[1].amount == 2)
+            if template == 9 then
+                assert(#s.players[target_side].board == 0 and events[2].kind == "death")
+            else
+                assert(s.players[target_side].board[1].health == 4 and #events == 1)
+            end
+        end
+    end
+    cards.definitions[extra_id] = nil
+end)
+
+test("unknown effects fail before spending resources or mutating the match", function()
+    local cards = require("game.cards")
+    local animation = require("game.animation")
+    local extra_id = 101
+    local extra = animation.snapshot(cards.definitions[9])
+    extra.effect = "unimplemented"
+    cards.definitions[extra_id] = extra
+    local s = fresh()
+    s.players[1].hand, s.players[1].mana = { extra_id }, 6
+    s.players[2].board = { unit(20, 3) }
+    local before = snapshot(s)
+    local ok, reason = pcall(match.apply, s, 1, { kind = "cast", hand = 1, target = 20 })
+    assert(not ok and type(reason) == "string" and reason:find("Unknown spell effect: unimplemented", 1, true))
+    assert(snapshot(s) == before)
+    cards.definitions[extra_id] = nil
+end)
+
+test("combat reports damage before deaths without retaining live state", function()
+    local s = fresh()
+    s.players[1].board = { unit(11, 4, 1) }
+    s.players[2].board = { unit(22, 2) }
+    local ok, reason, events = match.apply(s, 1, { kind = "attack", attacker = 11, target = 22 })
+    assert(ok, reason)
+    assert(events)
+    assert(snapshot(events) == snapshot({
+        { kind = "damage", side = 1, id = 11, amount = 3 },
+        { kind = "damage", side = 2, id = 22, amount = 5 },
+        { kind = "death", side = 1, id = 11 },
+        { kind = "death", side = 2, id = 22 },
+    }))
+    local before = snapshot(s)
+    events[1].amount, events[3].id = 999, 999
+    assert(snapshot(s) == before)
+end)
+
+test("draw outcomes distinguish received cards from full-hand burns", function()
+    local animation = require("game.animation")
+    for _, full in ipairs({ false, true }) do
+        local s = fresh()
+        s.players[2].deck = { 1 }
+        s.players[2].hand = full and { 1, 1, 2, 2, 3, 3, 4 } or { 1 }
+        local before = animation.snapshot(s)
+        local action = { kind = "end_turn" }
+        local ok, reason, events = match.apply(s, 1, action)
+        assert(ok, reason)
+        assert(events)
+        local effect = animation.new(before, 1, action, events)
+        if full then
+            assert(#events == 0 and not effect.drawn_hand)
+        else
+            assert(#events == 1 and events[1].kind == "draw")
+            assert(effect.drawn_side == 2 and effect.drawn_hand == 2)
+        end
+    end
 end)
 
 print(passed .. " tests passed")
