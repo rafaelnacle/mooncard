@@ -13,9 +13,13 @@ function animation.new(before, after, side, action)
         before = before, side = side, kind = action.kind,
         elapsed = 0, duration = 0.4, impact = action.kind == "attack" and 0.16 or 0,
         attacker = action.attacker, target = action.target, hand = action.hand,
-        damage = {}, dead = {},
+        damage = {}, dead = {}, healing = {},
     }
     if action.kind == "play" then effect.summoned = after.next_id - 1 end
+    if action.kind == "cast" then
+        effect.spell = match.cards[before.players[side].hand[action.hand]]
+        effect.target_side = effect.spell.effect == "heal" and side or 3 - side
+    end
     for player_side, player in ipairs(before.players) do
         local next_player = after.players[player_side]
         local hero_damage = player.health - next_player.health
@@ -37,6 +41,10 @@ function animation.new(before, after, side, action)
                         amount = match.cards[other.card].attack
                     end
                 end
+            end
+            if not survivor and effect.spell then amount = effect.spell.amount end
+            if amount < 0 then
+                table.insert(effect.healing, { side = player_side, id = unit.id, amount = -amount })
             end
             if amount > 0 then
                 table.insert(effect.damage, { side = player_side, id = unit.id, amount = amount })

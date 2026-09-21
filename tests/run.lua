@@ -30,11 +30,11 @@ end
 test("opening hands, decks, first draw and mana", function()
     local s = fresh()
     assert(s.active == 1 and s.turn == 1)
-    assert(#s.players[1].hand == 4 and #s.players[1].deck == 12)
-    assert(#s.players[2].hand == 3 and #s.players[2].deck == 13)
+    assert(#s.players[1].hand == 4 and #s.players[1].deck == 16)
+    assert(#s.players[2].hand == 3 and #s.players[2].deck == 17)
     assert(s.players[1].mana == 1 and s.players[2].mana == 0)
     for _, p in ipairs(s.players) do
-        local counts = { 0, 0, 0, 0, 0, 0, 0, 0 }
+        local counts = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
         for _, zone in ipairs({ p.deck, p.hand }) do
             for _, card in ipairs(zone) do counts[card] = counts[card] + 1 end
         end
@@ -248,19 +248,135 @@ end)
 
 test("expanded roster is playable at its cost and every Guard protects its hero", function()
     for card_id, card in ipairs(match.cards) do
-        local s = fresh()
-        s.players[1].hand, s.players[1].mana = { card_id }, card.cost
-        assert(match.apply(s, 1, { kind = "play", hand = 1 }))
-        local creature = s.players[1].board[1]
-        assert(creature.card == card_id and creature.health == card.health)
-        assert(s.players[1].mana == 0 and not creature.ready)
-        s.players[2].board = { unit(99, card_id) }
-        creature.ready = true
-        local valid, reason = match.validate(s, 1,
-            { kind = "attack", attacker = creature.id, target = "hero" })
-        assert(valid == not card.guard)
-        if card.guard then assert(reason == "Defeat enemy Guards first.") end
+        if card.kind ~= "spell" then
+            local s = fresh()
+            s.players[1].hand, s.players[1].mana = { card_id }, card.cost
+            assert(match.apply(s, 1, { kind = "play", hand = 1 }))
+            local creature = s.players[1].board[1]
+            assert(creature.card == card_id and creature.health == card.health)
+            assert(s.players[1].mana == 0 and not creature.ready)
+            s.players[2].board = { unit(99, card_id) }
+            creature.ready = true
+            local valid, reason = match.validate(s, 1,
+                { kind = "attack", attacker = creature.id, target = "hero" })
+            assert(valid == not card.guard)
+            if card.guard then assert(reason == "Defeat enemy Guards first.") end
+        end
     end
+end)
+
+test("Ember Bolt bypasses Guard, consumes mana and card once, and never retaliates", function()
+    local s = fresh()
+    local p, enemy = s.players[1], s.players[2]
+    p.hand, p.mana, p.board = { 9 }, 2, { unit(1, 1) }
+    enemy.board = { unit(2, 3), unit(3, 2) }
+    assert(match.apply(s, 1, { kind = "cast", hand = 1, target = 3 }))
+    assert(#p.hand == 0 and p.mana == 0 and #p.board == 1)
+    assert(p.board[1].health == 2 and p.board[1].ready)
+    assert(#enemy.board == 1 and enemy.board[1].id == 2 and enemy.board[1].health == 5)
+    reject(s, 1, { kind = "cast", hand = 1, target = 2 }, "Choose a card in your hand.")
+end)
+
+test("spell target failures and cancellation checks preserve the match", function()
+    local s = fresh()
+    s.players[1].hand, s.players[1].mana = { 9, 10, 1 }, 6
+    s.players[1].board = { unit(1, 3, 3), unit(2, 1) }
+    s.players[2].board = { unit(3, 3) }
+    local before = snapshot(s)
+    assert(match.can_play(s, 1, 1) and match.can_play(s, 1, 2))
+    assert(snapshot(s) == before)
+    reject(s, 1, { kind = "cast", hand = 1, target = 1 }, "Choose an enemy creature.")
+    reject(s, 1, { kind = "cast", hand = 1, target = "hero" }, "Choose an enemy creature.")
+    reject(s, 1, { kind = "cast", hand = 2, target = 3 }, "Choose a wounded friendly creature.")
+    reject(s, 1, { kind = "cast", hand = 2, target = "hero" }, "Choose a wounded friendly creature.")
+    reject(s, 1, { kind = "cast", hand = 2, target = 2 }, "That creature is already at full health.")
+    reject(s, 1, { kind = "cast", hand = 2, target = 99 }, "Choose a wounded friendly creature.")
+    reject(s, 1, { kind = "play", hand = 1 }, "Choose a target for this spell.")
+    reject(s, 1, { kind = "cast", hand = 3, target = 3 }, "That card is a creature, not a spell.")
+    reject(s, 2, { kind = "cast", hand = 1, target = 1 }, "Wait for your turn.")
+    s.players[1].mana = 0
+    reject(s, 1, { kind = "cast", hand = 1, target = 3 }, "Not enough mana.")
+end)
+
+test("healing caps at starting health, works on a full board, and preserves readiness", function()
+    local s = fresh()
+    local p = s.players[1]
+    p.hand, p.mana = { 10, 10, 9 }, 6
+    for i = 1, 5 do p.board[i] = unit(i, 3) end
+    p.board[1].health, p.board[1].ready = 4, false
+    assert(match.apply(s, 1, { kind = "cast", hand = 1, target = 1 }))
+    assert(p.board[1].health == 5 and not p.board[1].ready and #p.board == 5 and p.mana == 5)
+    reject(s, 1, { kind = "cast", hand = 1, target = 1 }, "No wounded friendly creature to heal.")
+    s.players[2].board = { unit(99, 3) }
+    assert(match.apply(s, 1, { kind = "cast", hand = 2, target = 99 }))
+    assert(s.players[2].board[1].health == 2 and #p.board == 5)
+    p.hand, p.mana = { 9 }, 2
+    s.players[2].board = {}
+    reject(s, 1, { kind = "cast", hand = 1, target = 99 }, "No enemy creature to target.")
+end)
+
+test("legal spells and AI work from either player's side", function()
+    for side = 1, 2 do
+        local s = fresh()
+        s.active = side
+        local p, enemy = s.players[side], s.players[3 - side]
+        p.hand, p.mana, p.board = { 9 }, 2, {}
+        enemy.board = { unit(20, 2), unit(21, 3) }
+        local best = ai.choose(s, side)
+        assert(best.kind == "cast" and best.target == 20)
+        assert(match.apply(s, side, best))
+        p.hand, p.mana, p.board = { 10 }, 1, { unit(22, 3, 2) }
+        best = ai.choose(s, side)
+        assert(best.kind == "cast" and best.target == 22)
+        assert(match.apply(s, side, best) and p.board[1].health == 5)
+        p.hand, p.mana, p.board = { 9 }, 2, {}
+        enemy.board = { unit(23, 4) }
+        assert(ai.choose(s, side).kind == "end_turn")
+    end
+end)
+
+test("spell animations retain lethal targets and show actual capped healing", function()
+    local animation = require("game.animation")
+    local s = fresh()
+    s.players[1].hand, s.players[1].mana = { 9, 10 }, 3
+    s.players[1].board = { unit(1, 3, 4) }
+    s.players[2].board = { unit(2, 2) }
+    local before = animation.snapshot(s)
+    local action = { kind = "cast", hand = 1, target = 2 }
+    assert(match.apply(s, 1, action))
+    local effect = animation.new(before, s, 1, action)
+    assert(effect.kind == "cast" and effect.target_side == 2)
+    assert(#effect.dead == 1 and effect.damage[1].amount == 3 and #effect.healing == 0)
+    before = animation.snapshot(s)
+    action = { kind = "cast", hand = 1, target = 1 }
+    assert(match.apply(s, 1, action))
+    effect = animation.new(before, s, 1, action)
+    assert(effect.target_side == 1 and #effect.damage == 0 and effect.healing[1].amount == 1)
+end)
+
+test("inspection explains public cards and fits at screen edges", function()
+    local inspection = require("game.inspection")
+    local view = require("game.view")
+    local s = fresh()
+    s.players[1].hand = { 9, 10, 1, 2, 3, 4, 8 }
+    s.players[2].board = { unit(20, 3, 2) }
+    local before = snapshot(s)
+    for _, region in ipairs(view.regions(s)) do
+        local details = inspection.describe(s, region)
+        if region.kind == "hand" or region.kind == "unit" then
+            assert(details and #details.description > 0)
+            local bounds = inspection.bounds(region)
+            assert(bounds.x >= 0 and bounds.x + bounds.w <= 1280)
+            assert(bounds.y >= 0 and bounds.y + bounds.h <= 720)
+        else
+            assert(not details)
+        end
+    end
+    local details = inspection.describe(s, { kind = "unit", side = 2, id = 20 })
+    assert(details and details.health == 2 and details.description:find("Guard does not block spells", 1, true))
+    assert(not inspection.describe(s, nil))
+    assert(not inspection.describe(s, { kind = "hand", side = 2, index = 1 }))
+    assert(snapshot(s) == before)
 end)
 
 print(passed .. " tests passed")
